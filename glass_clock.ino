@@ -11,6 +11,10 @@ CRGB leds[NUM_LEDS];
 
 #define UPDATES_PER_SECOND 100
 
+#define TIME_HEADER  "T"   // Header tag for serial time sync message
+#define TIME_REQUEST  7    // ASCII bell character requests a time sync message 
+
+
 // This example shows several ways to set up and use 'palettes' of colors
 // with FastLED.
 //
@@ -42,10 +46,14 @@ const int n_steps_pulse = 50;
 float brightness_sec[n_steps_pulse];
 
 void setup() {
+    Serial.begin(9600);
+    while (!Serial) ; // Needed for Leonardo only
+    setSyncProvider( requestSync);  //set function to call when sync required
+    Serial.println("Waiting for sync message");
     delay( 3000 ); // power-up safety delay
     FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
     FastLED.setBrightness(  BRIGHTNESS );
-    setTime(14,28,0,23,1,2019);
+    //setTime(14,28,0,23,1,2019);
     hourFormat12();
     currentPalette = RainbowColors_p;
     currentBlending = LINEARBLEND;
@@ -74,7 +82,18 @@ int mincoords[] = {67, 68, 69, 70, 71,
                 22, 23, 24, 25, 26,
                 17, 18, 19, 20, 21,
                 12, 13, 14, 15, 16};
- void loop() {
+ 
+ void loop(){    
+  if (Serial.available()) {
+    processSyncMessage();
+  }
+  if (timeStatus()!= timeNotSet) {
+    digitalClockDisplay();  
+  }
+}
+ 
+ 
+ void digitalClockDisplay() {
       if (minute()!=0){
         count_down = 0;
         for(int led = 0; led < minute(); led++) {
@@ -137,4 +156,21 @@ int mincoords[] = {67, 68, 69, 70, 71,
         }
       
       }
-    
+
+ void processSyncMessage() {
+  unsigned long pctime;
+  const unsigned long DEFAULT_TIME = 1357041600; // Jan 1 2013
+
+  if(Serial.find(TIME_HEADER)) {
+     pctime = Serial.parseInt();
+     if( pctime >= DEFAULT_TIME) { // check the integer is a valid time (greater than Jan 1 2013)
+       setTime(pctime); // Sync Arduino clock to the time received on the serial port
+     }
+  }
+}
+
+time_t requestSync()
+{
+  Serial.write(TIME_REQUEST);  
+  return 0; // the time will be sent later in response to serial mesg
+}
