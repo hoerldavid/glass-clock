@@ -1,5 +1,6 @@
 #include <FastLED.h>
 #include <TimeLib.h>
+#include <math.h>
 
 #define LED_PIN     5
 #define NUM_LEDS    72
@@ -8,9 +9,11 @@
 #define COLOR_ORDER GRB
 CRGB leds[NUM_LEDS];
 
-
-
 #define UPDATES_PER_SECOND 100
+
+#define TIME_HEADER  "T"   // Header tag for serial time sync message
+#define MESSAGE_HEADER "X" // Header tag for color messages
+#define TIME_REQUEST  7    // ASCII bell character requests a time sync message 
 
 // This example shows several ways to set up and use 'palettes' of colors
 // with FastLED.
@@ -38,16 +41,34 @@ extern CRGBPalette16 myRedWhiteBluePalette;
 extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
 
+
+const int n_steps_pulse = 50;
+float brightness_sec[n_steps_pulse];
+
 void setup() {
+    Serial.begin(9600);
+    while (!Serial) ; // Needed for Leonardo only
+    setSyncProvider( requestSync);  //set function to call when sync required
+    Serial.println("Waiting for sync message");
     delay( 3000 ); // power-up safety delay
     FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
     FastLED.setBrightness(  BRIGHTNESS );
-    setTime(0,8,0,21,1,2019);
+    //setTime(14,28,0,23,1,2019);
     hourFormat12();
     currentPalette = RainbowColors_p;
     currentBlending = LINEARBLEND;
+
+    // precompute sine wave for pulsing second led
+    for (int i=0; i<n_steps_pulse; i++)
+    {
+      brightness_sec[i] = sin(M_PI * ((float) i / n_steps_pulse));
+    }
     
 }
+
+
+
+
 int count_down = 0;
 int mincoords[] = {67, 68, 69, 70, 71, 
                 62, 63, 64, 65, 66,
@@ -61,13 +82,48 @@ int mincoords[] = {67, 68, 69, 70, 71,
                 22, 23, 24, 25, 26,
                 17, 18, 19, 20, 21,
                 12, 13, 14, 15, 16};
- void loop() {
+ 
+ void loop(){    
+  if (Serial.available()) {
+    processSyncMessage();
+  }
+  if (timeStatus()!= timeNotSet) {
+    digitalClockDisplay();  
+  }
+}
+ 
+ void colorBlink(String msg){
+    //on LEDs used Green and Red are swapped!
+    String color=msg.substring(1);
+    int Gdot = color.indexOf('.');
+    int Bdot = color.substring(Gdot+1).indexOf('.')+Gdot+1;
+    int G = color.substring(0,Gdot).toInt();
+    int R = color.substring(Gdot+1, Bdot).toInt();
+    int B = color.substring(Bdot+1).toInt();
+    for(int n=0; n<10; n++)
+    {
+      for (int i=0; i<n_steps_pulse; i++)
+            {
+              for(int led = 0; led<72; led++) {
+                leds[led] = CRGB( R * brightness_sec[i], G * brightness_sec[i], B * brightness_sec[i]);
+              }
+              delay(1000/n_steps_pulse);
+              FastLED.show();
+            }
+    }
+    for(int led = 0; led<72; led++) {
+                leds[led] = CRGB::Black;
+              }
+              FastLED.show();
+  }
+ 
+ void digitalClockDisplay() {
       if (minute()!=0){
         count_down = 0;
         for(int led = 0; led < minute(); led++) {
           leds[mincoords[led]] = CRGB::White;
         }
-        leds[mincoords[minute()]] = CRGB::White;
+        
           if (hourFormat12() == 1){
             for(int led = 0; led < 12; led++) { 
               leds[led] = CRGB::Black;
@@ -76,11 +132,22 @@ int mincoords[] = {67, 68, 69, 70, 71,
           for(int led = 0; led < hourFormat12(); led++) { 
             leds[led] = CRGB( 100, 100, 255);
           }
+
+          for (int i=0; i<n_steps_pulse; i++)
+          {
+            leds[mincoords[minute()]] = CRGB( 255 * brightness_sec[i], 255 * brightness_sec[i], 255 * brightness_sec[i]);
+            delay(1000/n_steps_pulse);
+            FastLED.show();
+          }
+
+          /*
+           * leds[mincoords[minute()]] = CRGB::White;
           FastLED.show();
           delay(500);
           leds[mincoords[minute()]] = CRGB::Black;
           FastLED.show();
           delay(500);
+          */
           
       }
       else {
@@ -103,7 +170,6 @@ int mincoords[] = {67, 68, 69, 70, 71,
             for(int led = 0; led < hourFormat12(); led++) { 
               leds[led] = CRGB( 100, 100, 255);
             }
-          
           FastLED.show();
           delay(500);
           leds[mincoords[minute()]] = CRGB::Black;
@@ -114,4 +180,30 @@ int mincoords[] = {67, 68, 69, 70, 71,
         }
       
       }
+
+ void processSyncMessage() {
+  unsigned long pctime;
+  String msg;
+  const unsigned long DEFAULT_TIME = 1357041600; // Jan 1 2013
+  msg = Serial.readString();
+  
+  if(msg.startsWith(MESSAGE_HEADER)) {
+    colorBlink(msg);
+    Serial.println(msg);
+    }
     
+  if(msg.startsWith(TIME_HEADER)) {
+    pctime = msg.substring(1).toInt();
+     if( pctime >= DEFAULT_TIME) { // check the integer is a valid time (greater than Jan 1 2013)
+       setTime(pctime);
+       Serial.println(pctime);// Sync Arduino clock to the time received on the serial port
+        
+     }
+    }
+}
+
+time_t requestSync()
+{
+  Serial.write(TIME_REQUEST);  
+  return 0; // the time will be sent later in response to serial mesg
+}
