@@ -170,11 +170,14 @@ int mincoords[] = {67, 68, 69, 70, 71,
             for(int led = 0; led < hourFormat12(); led++) { 
               leds[led] = CRGB( 100, 100, 255);
             }
-          FastLED.show();
-          delay(500);
-          leds[mincoords[minute()]] = CRGB::Black;
-          FastLED.show();
-          delay(500);
+          
+          for (int i=0; i<n_steps_pulse; i++)
+          {
+            leds[mincoords[minute()]] = CRGB( 255 * brightness_sec[i], 255 * brightness_sec[i], 255 * brightness_sec[i]);
+            delay(1000/n_steps_pulse);
+            FastLED.show();
+          }
+          
           }
         count_down = 1;
         }
