@@ -45,6 +45,37 @@ extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 const int n_steps_pulse = 50;
 float brightness_sec[n_steps_pulse];
 
+
+uint8_t text_columns[12];
+
+void shift_text_columns(uint8_t* buf, uint8_t len, uint8_t next)
+{
+  for(uint8_t i=0; i<len-1; i++)
+  {
+    buf[i] = buf[i+1];
+  }
+  buf[len-1] = next;
+}
+
+void draw_text_columns(uint8_t* buf, uint8_t n_cols, uint8_t n_rows, CRGB* color)
+{
+  // TODO: implement me
+}
+
+void display_message(String* msg)
+{
+  // TODO: parse color
+  // TODO: while next int in String
+  //  push to end of text (shift)
+  //  display
+  //  wait
+  // for i in range(12):
+  // shift 0
+  // display
+  //  wait
+}
+
+ 
 void setup() {
     Serial.begin(9600);
     while (!Serial) ; // Needed for Leonardo only
@@ -90,6 +121,20 @@ int mincoords[] = {67, 68, 69, 70, 71,
   if (timeStatus()!= timeNotSet) {
     digitalClockDisplay();  
   }
+}
+
+
+void parse_color(String* msg, int rgb_out[])
+{
+  String color= *msg;
+  int Gdot = color.indexOf('.');
+  int Bdot = color.substring(Gdot+1).indexOf('.')+Gdot+1;
+  int G = color.substring(0,Gdot).toInt();
+  int R = color.substring(Gdot+1, Bdot).toInt();
+  int B = color.substring(Bdot+1).toInt();
+  rgb_out[0] = R;
+  rgb_out[1] = G;
+  rgb_out[2] = B;
 }
  
  void colorBlink(String msg){
