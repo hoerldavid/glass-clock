@@ -12,8 +12,11 @@ CRGB leds[NUM_LEDS];
 #define UPDATES_PER_SECOND 100
 
 #define TIME_HEADER  "T"   // Header tag for serial time sync message
-#define MESSAGE_HEADER "X" // Header tag for color messages
-#define TIME_REQUEST  7    // ASCII bell character requests a time sync message 
+#define BLINK_HEADER "X" // Header tag for color messages
+#define MESSAGE_HEADER "M" // Header tag for text messages
+#define TIME_REQUEST  7    // ASCII bell character requests a time sync message
+
+#define TICK_DELAY 80
 
 // This example shows several ways to set up and use 'palettes' of colors
 // with FastLED.
@@ -46,6 +49,20 @@ const int n_steps_pulse = 50;
 float brightness_sec[n_steps_pulse];
 
 
+int count_down = 0;
+int mincoords[] = {67, 68, 69, 70, 71, 
+                62, 63, 64, 65, 66,
+                57, 58, 59, 60, 61,
+                52, 53, 54, 55, 56,
+                47, 48, 49, 50, 51,
+                42, 43, 44, 45, 46,
+                37, 38, 39, 40, 41, 
+                32, 33, 34, 35, 36,
+                27, 28, 29, 30, 31,
+                22, 23, 24, 25, 26,
+                17, 18, 19, 20, 21,
+                12, 13, 14, 15, 16};
+
 uint8_t text_columns[12];
 
 void shift_text_columns(uint8_t* buf, uint8_t len, uint8_t next)
@@ -59,20 +76,56 @@ void shift_text_columns(uint8_t* buf, uint8_t len, uint8_t next)
 
 void draw_text_columns(uint8_t* buf, uint8_t n_cols, uint8_t n_rows, CRGB* color)
 {
-  // TODO: implement me
+  for (uint8_t col = 0; col < n_cols; col++)
+  {
+    for (uint8_t row = 0; row < n_rows; col++)
+    {
+      if((buf[col] >> (n_rows - 1 - row)) << row)
+      {
+        leds[mincoords[row + col*n_cols]] = *color;
+      }
+      else
+      {
+        leds[mincoords[row + col*n_cols]] = CRGB::Black;
+      }
+    }
+  }
+  FastLED.show();
 }
 
-void display_message(String* msg)
+void display_message(String* msg, uint16_t tick_delay)
 {
-  // TODO: parse color
-  // TODO: while next int in String
-  //  push to end of text (shift)
-  //  display
-  //  wait
-  // for i in range(12):
-  // shift 0
-  // display
-  //  wait
+  String _msg = *msg;
+
+  // check 
+  int next_sep = _msg.indexOf(",");
+  if (next_sep < 0)
+  {
+    return;
+  }
+
+  // parse color
+  int rgb_out[3];
+  String col_string = _msg.substring(0, next_sep);
+  parse_color(&col_string, rgb_out);
+  CRGB col = CRGB(rgb_out[0], rgb_out[1], rgb_out[2]);
+  _msg = _msg.substring(next_sep+1);
+
+  while (next_sep = _msg.indexOf(",") > 0)
+  {
+    uint8_t next_int = _msg.substring(0,next_sep+1).toInt();
+    _msg = _msg.substring(next_sep+1);
+    shift_text_columns(text_columns, 12, next_int);
+    draw_text_columns(text_columns, 12, 5, &col);
+    delay(tick_delay);
+    
+  }
+  for (uint8_t i=0; i<12; i++)
+  {
+    shift_text_columns(text_columns, 12, 0);
+    draw_text_columns(text_columns, 12, 5, &col);
+    delay(tick_delay);
+  }
 }
 
  
@@ -100,19 +153,6 @@ void setup() {
 
 
 
-int count_down = 0;
-int mincoords[] = {67, 68, 69, 70, 71, 
-                62, 63, 64, 65, 66,
-                57, 58, 59, 60, 61,
-                52, 53, 54, 55, 56,
-                47, 48, 49, 50, 51,
-                42, 43, 44, 45, 46,
-                37, 38, 39, 40, 41, 
-                32, 33, 34, 35, 36,
-                27, 28, 29, 30, 31,
-                22, 23, 24, 25, 26,
-                17, 18, 19, 20, 21,
-                12, 13, 14, 15, 16};
  
  void loop(){    
   if (Serial.available()) {
@@ -235,10 +275,16 @@ void parse_color(String* msg, int rgb_out[])
   const unsigned long DEFAULT_TIME = 1357041600; // Jan 1 2013
   msg = Serial.readString();
   
-  if(msg.startsWith(MESSAGE_HEADER)) {
+  if(msg.startsWith(BLINK_HEADER)) {
     colorBlink(msg);
     Serial.println(msg);
     }
+
+  if (msg.startsWith(MESSAGE_HEADER))
+  {
+    String msg2 = msg.substring(1);
+    display_message(&msg2, TICK_DELAY);
+  }
     
   if(msg.startsWith(TIME_HEADER)) {
     pctime = msg.substring(1).toInt();
